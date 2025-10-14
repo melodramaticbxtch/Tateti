@@ -1,0 +1,199 @@
+
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tateti</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Lexend&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <h1>Tatetí</h1>
+    <div class="status" id="status">Turno de: X</div>
+    <div id="board"></div>
+    <div class="controls">
+      <button class="btn-primary" id="restart">Reiniciar</button>
+      <button class="btn-ghost" id="ai">Jugar vs CPU</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const tableroEl = document.getElementById('board');
+  const estadoEl = document.getElementById('status');
+  const btnReiniciar = document.getElementById('restart');
+  const btnIA = document.getElementById('ai');
+
+  let tablero; // array de 9 posiciones: 'X' | 'O' | ''
+  let turno;   // 'X' o 'O'
+  let enJuego = true;
+  let contraIA = false;
+
+  const COMBINACIONES_GANADORAS = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  function iniciar() {
+    tablero = Array(9).fill('');
+    turno = 'X';
+    enJuego = true;
+    renderizarTablero();
+    actualizarEstado();
+  }
+
+  function renderizarTablero() {
+    tableroEl.innerHTML = '';
+    for (let i = 0; i < 9; i++) {
+      const celda = document.createElement('div');
+      celda.className = 'cell' + (tablero[i] ? ' disabled' : '');
+      celda.dataset.indice = i;
+      celda.textContent = tablero[i];
+      celda.addEventListener('click', alHacerClickCelda);
+      tableroEl.appendChild(celda);
+    }
+  }
+
+  function alHacerClickCelda(e) {
+    const i = Number(e.currentTarget.dataset.indice);
+    if (!enJuego || tablero[i]) return;
+    hacerMovimiento(i, turno);
+    if (enJuego && contraIA && turno === 'O') {
+      // después del movimiento del jugador, juega la CPU (CPU es 'O')
+      setTimeout(movimientoIA, 250);
+    }
+  }
+
+  function hacerMovimiento(i, jugador) {
+    if (tablero[i] || !enJuego) return;
+    tablero[i] = jugador;
+    
+    // actualizar rápidamente el DOM
+    const celda = tableroEl.querySelector(`.cell[data-indice="${i}"]`);
+    if (celda) {
+      celda.textContent = jugador;
+      celda.classList.add('disabled');
+    }
+
+    if (verificarGanador(jugador)) {
+      estadoEl.textContent = `Gana ${jugador} 🎉`;
+      enJuego = false;
+      resaltarVictoria(jugador);
+      return;
+    }
+
+    if (tablero.every(x => x)) {
+      estadoEl.textContent = "Empate";
+      enJuego = false;
+      return;
+    }
+
+    turno = (jugador === 'X') ? 'O' : 'X';
+    actualizarEstado();
+  }
+
+  function actualizarEstado() {
+    estadoEl.textContent = enJuego ? `Turno de: ${turno}` : estadoEl.textContent;
+  }
+
+  function verificarGanador(jugador) {
+    return COMBINACIONES_GANADORAS.some(combo =>
+      combo.every(idx => tablero[idx] === jugador)
+    );
+  }
+
+  function resaltarVictoria(jugador) {
+    COMBINACIONES_GANADORAS.forEach(combo => {
+      if (combo.every(idx => tablero[idx] === jugador)) {
+        combo.forEach(idx => {
+          const c = tableroEl.querySelector(`.cell[data-indice="${idx}"]`);
+          if (c) c.style.background = '#fff5d6';
+        });
+      }
+    });
+  }
+
+  function movimientoIA() {
+    if (!enJuego) return;
+    const ia = 'O', humano = 'X';
+
+    // 1) ¿Puede la IA ganar?
+    for (let i = 0; i < 9; i++) {
+      if (!tablero[i]) {
+        tablero[i] = ia;
+        if (verificarGanador(ia)) {
+          const celda = tableroEl.querySelector(`.cell[data-indice="${i}"]`);
+          if (celda) {
+            celda.textContent = ia;
+            celda.classList.add('disabled');
+          }
+          resaltarVictoria(ia);
+          estadoEl.textContent = `Gana ${ia} 🎉`;
+          enJuego = false;
+          return;
+        }
+        tablero[i] = '';
+      }
+    }
+
+    // 2) ¿Debe bloquear al humano?
+    for (let i = 0; i < 9; i++) {
+      if (!tablero[i]) {
+        tablero[i] = humano;
+        if (verificarGanador(humano)) {
+          tablero[i] = ia;
+          const celda = tableroEl.querySelector(`.cell[data-indice="${i}"]`);
+          if (celda) {
+            celda.textContent = ia;
+            celda.classList.add('disabled');
+          }
+          if (verificarGanador(ia)) {
+            resaltarVictoria(ia);
+            estadoEl.textContent = `Gana ${ia} 🎉`;
+            enJuego = false;
+            return;
+          }
+          turno = humano;
+          actualizarEstado();
+          return;
+        }
+        tablero[i] = '';
+      }
+    }
+
+    // 3) Tomar el centro si está libre
+    if (!tablero[4]) {
+      hacerMovimiento(4, ia);
+      return;
+    }
+
+    // 4) Tomar esquina aleatoria, luego lados
+    const esquinas = [0,2,6,8].filter(i => !tablero[i]);
+    if (esquinas.length) {
+      hacerMovimiento(esquinas[Math.floor(Math.random() * esquinas.length)], ia);
+      return;
+    }
+
+    const lados = [1,3,5,7].filter(i => !tablero[i]);
+    if (lados.length) {
+      hacerMovimiento(lados[Math.floor(Math.random() * lados.length)], ia);
+      return;
+    }
+  }
+
+  btnReiniciar.addEventListener('click', iniciar);
+
+  btnIA.addEventListener('click', () => {
+    contraIA = !contraIA;
+    btnIA.textContent = contraIA ? 'Humano vs Humano' : 'Jugar vs CPU';
+    iniciar();
+  });
+
+  iniciar();
+})();
+</script>
+</body>
+</html>
